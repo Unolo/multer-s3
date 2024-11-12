@@ -23,6 +23,7 @@ var defaultContentEncoding = staticValue(null)
 var defaultStorageClass = staticValue('STANDARD')
 var defaultSSE = staticValue(null)
 var defaultSSEKMS = staticValue(null)
+var defaultTag = staticValue(null);
 
 // Regular expression to detect svg file content, inspired by: https://github.com/sindresorhus/is-svg/blob/master/index.js
 // It is not always possible to check for an end tag if a file is very big. The firstChunk, see below, might not be the entire file.
@@ -77,10 +78,10 @@ function collect (storage, req, file, cb) {
     storage.getStorageClass.bind(storage, req, file),
     storage.getSSE.bind(storage, req, file),
     storage.getSSEKMS.bind(storage, req, file),
-    storage.getContentEncoding.bind(storage, req, file)
+    storage.getContentEncoding.bind(storage, req, file),
+    storage.getTag.bind(storage, req, file),
   ], function (err, values) {
     if (err) return cb(err)
-
     storage.getContentType(req, file, function (err, contentType, replacementStream) {
       if (err) return cb(err)
 
@@ -96,13 +97,17 @@ function collect (storage, req, file, cb) {
         replacementStream: replacementStream,
         serverSideEncryption: values[7],
         sseKmsKeyId: values[8],
-        contentEncoding: values[9]
+        contentEncoding: values[9],
+        tag: values[10]
+
       })
     })
   })
 }
 
 function S3Storage (opts) {
+
+
   switch (typeof opts.s3) {
     case 'object': this.s3 = opts.s3; break
     default: throw new TypeError('Expected opts.s3 to be object')
@@ -181,6 +186,13 @@ function S3Storage (opts) {
     case 'undefined': this.getSSEKMS = defaultSSEKMS; break
     default: throw new TypeError('Expected opts.sseKmsKeyId to be undefined, string, or function')
   }
+
+  switch (typeof opts.tag) {    
+    case 'function': this.getTag = opts.tag; break
+    case 'string': this.getTag = staticValue(opts.tag); break
+    case 'undefined': this.getTag = defaultTag; break
+    default: throw new TypeError('Expected opts.getTag to be undefined, string, or function')
+  }
 }
 
 S3Storage.prototype._handleFile = function (req, file, cb) {
@@ -199,7 +211,7 @@ S3Storage.prototype._handleFile = function (req, file, cb) {
       StorageClass: opts.storageClass,
       ServerSideEncryption: opts.serverSideEncryption,
       SSEKMSKeyId: opts.sseKmsKeyId,
-      Body: (opts.replacementStream || file.stream)
+      Body: (opts.replacementStream || file.stream)      
     }
 
     if (opts.contentDisposition) {
@@ -208,6 +220,10 @@ S3Storage.prototype._handleFile = function (req, file, cb) {
 
     if (opts.contentEncoding) {
       params.ContentEncoding = opts.contentEncoding
+    }
+
+    if (opts.tag) {
+      params.Tagging = opts.tag
     }
 
     var upload = new Upload({
@@ -235,7 +251,8 @@ S3Storage.prototype._handleFile = function (req, file, cb) {
         metadata: opts.metadata,
         location: result.Location,
         etag: result.ETag,
-        versionId: result.VersionId
+        versionId: result.VersionId,
+        tag: opts.tag
       })
     })
   })
