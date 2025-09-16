@@ -196,9 +196,15 @@ function S3Storage (opts) {
 }
 
 S3Storage.prototype._handleFile = function (req, file, cb) {
+  console.log('_handleFile started for key:%s', file.fieldname);
+  
   collect(this, req, file, function (err, opts) {
-    if (err) return cb(err)
+    if (err) {
+      console.log('collect failed:%s', err.message);
+      return cb(err);
+    }
 
+    console.log('collect completed, starting S3 upload for key:%s', opts.key);
     var currentSize = 0
 
     var params = {
@@ -226,18 +232,25 @@ S3Storage.prototype._handleFile = function (req, file, cb) {
       params.Tagging = opts.tag
     }
 
+    console.log('Creating Upload instance for key:%s', opts.key);
     var upload = new Upload({
       client: this.s3,
       params: params
     })
 
     upload.on('httpUploadProgress', function (ev) {
+      console.log('Upload progress for key:%s, loaded:%d, total:%d', opts.key, ev.loaded, ev.total);
       if (ev.total) currentSize = ev.total
     })
 
+    console.log('Starting upload.done() for key:%s', opts.key);
     util.callbackify(upload.done.bind(upload))(function (err, result) {
-      if (err) return cb(err)
+      if (err) {
+        console.log('Upload failed for key:%s, error:%s', opts.key, err.message);
+        return cb(err);
+      }
 
+      console.log('Upload completed successfully for key:%s, location:%s', opts.key, result.Location);
       cb(null, {
         size: currentSize,
         bucket: opts.bucket,
