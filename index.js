@@ -244,12 +244,9 @@ S3Storage.prototype._handleFile = function (req, file, cb) {
     })
 
     console.log('Starting upload.done() for key:%s', opts.key);
-    util.callbackify(upload.done.bind(upload))(function (err, result) {
-      if (err) {
-        console.log('Upload failed for key:%s, error:%s', opts.key, err.message);
-        return cb(err);
-      }
 
+    upload.done()
+    .then(function(result) {
       console.log('Upload completed successfully for key:%s, location:%s', opts.key, result.Location);
       cb(null, {
         size: currentSize,
@@ -266,8 +263,13 @@ S3Storage.prototype._handleFile = function (req, file, cb) {
         etag: result.ETag,
         versionId: result.VersionId,
         tag: opts.tag
-      })
+      });
     })
+    .catch(function(err) {
+      console.log('Upload failed for key:%s, error:%s', opts.key, err.message || err);
+      cb(err);
+    });
+
   })
 }
 
